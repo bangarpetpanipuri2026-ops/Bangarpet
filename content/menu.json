@@ -13,27 +13,27 @@
     "category": "Chaat", "name": "Bhel Puri", "price": "9.99", "currency": "$",
     "description": "Puffed rice, chutneys, sev and crunch.",
     "ingredients": "Crispy puffed rice · Green peas · Roasted groundnuts · House masala · Fresh lemon",
-    "tags": ["Vegetarian"], "imageUrl": "./photos/images/bhel-puri.jpg"
+    "tags": ["Vegetarian"], "imageUrl": "./photos/images/bhel-puri.png"
   },
   {
     "id": "dahi-puri", "order": 3, "visible": true,
     "category": "Chaat", "name": "Dahi Puri", "price": "11.99", "currency": "$",
     "description": "Cool yoghurt, chutney and a bright spice finish.",
     "ingredients": "Homemade crispy puri · Green peas · Fresh onion · Creamy yoghurt · Sweet masala",
-    "tags": ["Vegetarian"], "imageUrl": "./photos/images/dahi-puri.jpg"
+    "tags": ["Vegetarian"], "imageUrl": "./photos/images/dahi-puri.png"
   },
   {
     "id": "masala-puri", "order": 4, "visible": true,
     "category": "Pani Puri", "name": "Masala Puri", "price": "9.99", "currency": "$",
     "description": "Warm, savoury and deeply satisfying.",
     "ingredients": "Fresh ingredients · Crispy puri · Green peas · Secret masala · Fresh carrot",
-    "tags": ["Vegetarian"], "imageUrl": "./photos/images/masala-puri.jpg"
+    "tags": ["Vegetarian"], "imageUrl": "./photos/images/masala-puri.png"
   },
   {
     "id": "sev-puri", "order": 5, "visible": true,
     "category": "Chaat", "name": "Sev Puri", "price": "9.99", "currency": "$",
     "description": "Potato, chutney, sev and fresh crunch.",
     "ingredients": "Homemade crispy puri · Green peas · House masala · Fresh cucumber · Fresh tomato",
-    "tags": ["Vegetarian"], "imageUrl": "./photos/images/sev-puri.jpg"
+    "tags": ["Vegetarian"], "imageUrl": "./photos/images/sev-puri.png"
   }
 ]
