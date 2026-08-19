@@ -1,6 +1,7 @@
 let site = null;
 let menu = [];
 let currentUser = null;
+let unsavedChanges = false;
 
 const $ = (selector) => document.querySelector(selector);
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -21,7 +22,7 @@ function makeField(label, value, onChange, type = "text", full = false) {
   const input = type === "textarea" ? document.createElement("textarea") : document.createElement("input");
   input.value = value ?? "";
   if (type !== "textarea") input.type = type;
-  input.addEventListener("input", () => onChange(input.value));
+  input.addEventListener("input", () => { unsavedChanges = true; onChange(input.value); });
   wrapper.append(input);
   return wrapper;
 }
@@ -34,12 +35,14 @@ async function loadContent() {
   if (!siteResponse.ok || !menuResponse.ok) throw new Error("Could not load content JSON files.");
   site = await siteResponse.json();
   menu = await menuResponse.json();
+  unsavedChanges = false;
   renderAll();
 }
 
 function moveItem(items, index, direction) {
   const target = index + direction;
   if (target < 0 || target >= items.length) return;
+  unsavedChanges = true;
   [items[index], items[target]] = [items[target], items[index]];
   items.forEach((item, position) => { item.order = position + 1; });
 }
@@ -75,6 +78,7 @@ function renderSections() {
     duplicate.type = "button";
     duplicate.textContent = "Duplicate";
     duplicate.onclick = () => {
+      unsavedChanges = true;
       const copy = clone(section);
       copy.id = `${section.type || "section"}-${Date.now()}`;
       copy.order = site.sections.length + 1;
@@ -87,6 +91,7 @@ function renderSections() {
     remove.textContent = "Delete";
     remove.onclick = () => {
       if (!window.confirm(`Delete ${section.id}?`)) return;
+      unsavedChanges = true;
       site.sections.splice(index, 1);
       site.sections.forEach((item, position) => { item.order = position + 1; });
       renderSections();
@@ -160,6 +165,7 @@ function renderMenu() {
     remove.textContent = "Delete";
     remove.onclick = () => {
       if (!window.confirm("Delete this menu item?")) return;
+      unsavedChanges = true;
       menu.splice(index, 1);
       renderMenu();
     };
@@ -225,18 +231,25 @@ async function publishFile(path, data) {
 }
 
 async function publishAll() {
+  const button = $("#publish");
+  const originalLabel = button ? button.textContent : "";
   try {
+    if (button) { button.disabled = true; button.textContent = "Publishing…"; }
     setStatus("Publishing to GitHub…");
     await publishFile("content/site.json", site);
     await publishFile("content/menu.json", menu);
+    unsavedChanges = false;
     setStatus("Published successfully. Cloudflare Pages will deploy the commit.");
   } catch (error) {
     console.error(error);
     setStatus(error.message, true);
+  } finally {
+    if (button) { button.disabled = false; button.textContent = originalLabel; }
   }
 }
 
 function addSection() {
+  unsavedChanges = true;
   site.sections.push({
     id: `text-${Date.now()}`,
     type: "text",
@@ -249,6 +262,7 @@ function addSection() {
 }
 
 function addMenuItem() {
+  unsavedChanges = true;
   menu.push({
     id: `item-${Date.now()}`,
     order: menu.length + 1,
@@ -311,6 +325,7 @@ function setupTabs() {
 
 $("#add-section")?.addEventListener("click", addSection);
 $("#add-item")?.addEventListener("click", addMenuItem);
+$("#publish")?.addEventListener("click", publishAll);
 $("#logout")?.addEventListener("click", () => firebase.auth().signOut());
 $("#signin")?.addEventListener("click", async () => {
   try {
@@ -319,6 +334,12 @@ $("#signin")?.addEventListener("click", async () => {
   } catch (error) {
     $("#auth-error").textContent = `${error.code || "Login failed"}: ${error.message || "Check your credentials."}`;
   }
+});
+
+window.addEventListener("beforeunload", (event) => {
+  if (!unsavedChanges) return;
+  event.preventDefault();
+  event.returnValue = "";
 });
 
 setupTabs();
