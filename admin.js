@@ -1,14 +1,334 @@
-let site,menu,user;const $=s=>document.querySelector(s);const clone=x=>JSON.parse(JSON.stringify(x));const esc=s=>String(s??'');
-async function data(){[site,menu]=await Promise.all([fetch('./content/site.json').then(r=>r.json()),fetch('./content/menu.json').then(r=>r.json())]);renderAll()}
-function field(label,value,onchange,type='text',full=false){const wrap=document.createElement('label');if(full)wrap.className='full';wrap.textContent=label;const el=type==='textarea'?document.createElement('textarea'):document.createElement('input');if(type==='textarea')el.value=value??'';else{el.type=type;el.value=value??''}el.oninput=()=>onchange(el.value);wrap.append(el);return wrap}
-function renderAll(){renderSections();renderMenu();renderTheme()}
-function renderSections(){const box=$('#sections');box.innerHTML='';site.sections.sort((a,b)=>a.order-b.order).forEach((s,i)=>{const card=$('#section-template').content.cloneNode(true);card.querySelector('.label').textContent=`${s.type.toUpperCase()} · ${s.id}`;const fields=card.querySelector('.fields');const c=s.content||{},set=s.settings||{};fields.append(field('Section ID',s.id,v=>s.id=v),field('Type',s.type,v=>s.type=v),field('Visible',String(s.visible!==false),v=>s.visible=v==='true'),field('Display order',s.order,v=>s.order=Number(v),'number'));Object.keys(c).forEach(k=>fields.append(field(`Content: ${k}`,typeof c[k]==='object'?JSON.stringify(c[k]):c[k],v=>{try{c[k]=v.startsWith('{')||v.startsWith('[')?JSON.parse(v):v}catch{c[k]=v}},k==='body'||k==='title'?'textarea':'text',k==='body')));Object.keys(set).forEach(k=>fields.append(field(`Layout: ${k}`,set[k],v=>set[k]=isNaN(v)?v:Number(v))));card.querySelector('.up').onclick=()=>move(site.sections,i,-1);card.querySelector('.down').onclick=()=>move(site.sections,i,1);card.querySelector('.duplicate').onclick=()=>{let n=clone(s);n.id=`${s.type}-${Date.now()}`;n.order=Math.max(...site.sections.map(x=>x.order))+1;site.sections.push(n);renderSections()};card.querySelector('.remove').onclick=()=>{if(confirm(`Delete ${s.id}?`)){site.sections.splice(i,1);renderSections()}};box.append(card)})}
-function move(arr,i,d){let j=i+d;if(j<0||j>=arr.length)return;[arr[i],arr[j]]=[arr[j],arr[i]];arr.forEach((x,n)=>x.order=n+1);renderSections()}
-function renderMenu(){const box=$('#menu-items');box.innerHTML='';menu.sort((a,b)=>a.order-b.order).forEach((m,i)=>{const e=document.createElement('article');e.className='menu-editor';e.innerHTML=`<div class="row"><b>${esc(m.name||'New item')}</b><span><button class="up">↑</button><button class="down">↓</button><button class="remove">Delete</button></span></div><div class="fields"></div>`;let f=e.querySelector('.fields');['name','category','price','currency','description','ingredients','imageUrl','tags','visible','order'].forEach(k=>f.append(field(k,m[k],v=>m[k]=k==='visible'?v==='true':k==='order'?Number(v):k==='tags'?v.split(',').map(x=>x.trim()).filter(Boolean):v,k==='description'||k==='ingredients'?'textarea':'text',k==='description'||k==='ingredients'));e.querySelector('.up').onclick=()=>move(menu,i,-1);e.querySelector('.down').onclick=()=>move(menu,i,1);e.querySelector('.remove').onclick=()=>{if(confirm('Delete item?')){menu.splice(i,1);renderMenu()}};box.append(e)})}
-function renderTheme(){const box=$('#theme-form');box.innerHTML='';Object.entries(site.brand).forEach(([k,v])=>box.append(field(`Brand: ${k}`,v,x=>site.brand[k]=x)));Object.entries(site.theme).forEach(([k,v])=>box.append(field(`Theme: ${k}`,v,x=>site.theme[k]=isNaN(x)?x:Number(x))));Object.entries(site.footer).forEach(([k,v])=>{if(typeof v!=='object')box.append(field(`Footer: ${k}`,v,x=>site.footer[k]=x))})}
-async function publish(path,data){const token=await user.getIdToken();let r=await fetch('/api/publish',{method:'POST',headers:{'content-type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({action:'save-json',path,data})});if(!r.ok)throw new Error((await r.json()).error||'Publish failed')}
-async function save(){try{$('#status').textContent='Publishing to GitHub…';await publish('content/site.json',site);await publish('content/menu.json',menu);$('#status').textContent='Published. Cloudflare Pages will deploy the commit.'}catch(e){$('#status').textContent='Error: '+e.message}}
-$('#add-section').onclick=()=>{site.sections.push({id:`text-${Date.now()}`,type:'text',order:site.sections.length+1,visible:true,settings:{background:'#FBF8F1',align:'left',animation:'fade-up',delay:0},content:{eyebrow:'New section',title:'New title',body:'Write your content here.'}});renderSections()};$('#add-item').onclick=()=>{menu.push({id:`item-${Date.now()}`,order:menu.length+1,visible:true,category:'Chaat',name:'New menu item',price:'0.00',currency:'$',description:'Description',ingredients:'Ingredients',tags:[],imageUrl:''});renderMenu()};
-document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');document.querySelectorAll('.view').forEach(v=>v.hidden=v.id!==t.dataset.view)});$('#upload').onclick=async()=>{let file=$('#media-file').files[0];if(!file)return;let ok=['image/jpeg','image/png','image/webp','video/mp4','video/webm'].includes(file.type),limit=file.type.startsWith('video/')?15:5;if(!ok||file.size>limit*1024*1024){$('#upload-result').textContent='Unsupported file or too large.';return}let token=await user.getIdToken(),base64=await new Promise((res,rej)=>{let r=new FileReader;r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file)});let r=await fetch('/api/publish',{method:'POST',headers:{'content-type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({action:'upload-media',name:file.name.replace(/[^a-z0-9._-]/gi,'-'),contentType:file.type,base64})});let out=await r.json();$('#upload-result').textContent=out.ok?`Uploaded: ${out.path}`:(out.error||'Upload failed')};
-const bar=document.createElement('button');bar.textContent='Publish all changes';bar.style.cssText='position:fixed;right:24px;bottom:24px;background:#c5673d;color:#fff;border:0;border-radius:999px;padding:14px 20px;font-weight:700;box-shadow:0 8px 24px #0003';bar.onclick=save;document.body.append(bar);
-$('#signin').onclick=async()=>{try{await firebase.auth().signInWithEmailAndPassword($('#email').value,$('#password').value)}catch(e){$('#auth-error').textContent='Sign-in failed'}};$('#logout').onclick=()=>firebase.auth().signOut();firebase.auth().onAuthStateChanged(async u=>{if(!u)return;user=u;$('#login').hidden=true;$('#app').hidden=false;$('#user').textContent=u.email;await data()});
+let site = null;
+let menu = [];
+let currentUser = null;
+
+const $ = (selector) => document.querySelector(selector);
+const clone = (value) => JSON.parse(JSON.stringify(value));
+const text = (value) => String(value ?? "");
+
+function setStatus(message, error = false) {
+  const element = $("#status");
+  if (!element) return;
+  element.textContent = message;
+  element.style.color = error ? "#b13b2e" : "#267140";
+}
+
+function makeField(label, value, onChange, type = "text", full = false) {
+  const wrapper = document.createElement("label");
+  if (full) wrapper.className = "full";
+  wrapper.append(document.createTextNode(label));
+
+  const input = type === "textarea" ? document.createElement("textarea") : document.createElement("input");
+  input.value = value ?? "";
+  if (type !== "textarea") input.type = type;
+  input.addEventListener("input", () => onChange(input.value));
+  wrapper.append(input);
+  return wrapper;
+}
+
+async function loadContent() {
+  const [siteResponse, menuResponse] = await Promise.all([
+    fetch("./content/site.json", { cache: "no-store" }),
+    fetch("./content/menu.json", { cache: "no-store" })
+  ]);
+  if (!siteResponse.ok || !menuResponse.ok) throw new Error("Could not load content JSON files.");
+  site = await siteResponse.json();
+  menu = await menuResponse.json();
+  renderAll();
+}
+
+function moveItem(items, index, direction) {
+  const target = index + direction;
+  if (target < 0 || target >= items.length) return;
+  [items[index], items[target]] = [items[target], items[index]];
+  items.forEach((item, position) => { item.order = position + 1; });
+}
+
+function renderSections() {
+  const container = $("#sections");
+  if (!container) return;
+  container.innerHTML = "";
+
+  site.sections.sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+
+  site.sections.forEach((section, index) => {
+    const card = document.createElement("article");
+    card.className = "editor-card";
+
+    const header = document.createElement("div");
+    header.className = "row";
+    const title = document.createElement("b");
+    title.textContent = `${String(section.type || "section").toUpperCase()} · ${section.id}`;
+    const actions = document.createElement("span");
+
+    const up = document.createElement("button");
+    up.type = "button";
+    up.textContent = "↑";
+    up.onclick = () => { moveItem(site.sections, index, -1); renderSections(); };
+
+    const down = document.createElement("button");
+    down.type = "button";
+    down.textContent = "↓";
+    down.onclick = () => { moveItem(site.sections, index, 1); renderSections(); };
+
+    const duplicate = document.createElement("button");
+    duplicate.type = "button";
+    duplicate.textContent = "Duplicate";
+    duplicate.onclick = () => {
+      const copy = clone(section);
+      copy.id = `${section.type || "section"}-${Date.now()}`;
+      copy.order = site.sections.length + 1;
+      site.sections.push(copy);
+      renderSections();
+    };
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "Delete";
+    remove.onclick = () => {
+      if (!window.confirm(`Delete ${section.id}?`)) return;
+      site.sections.splice(index, 1);
+      site.sections.forEach((item, position) => { item.order = position + 1; });
+      renderSections();
+    };
+
+    actions.append(up, down, duplicate, remove);
+    header.append(title, actions);
+    card.append(header);
+
+    const fields = document.createElement("div");
+    fields.className = "fields";
+
+    fields.append(
+      makeField("Section ID", section.id, (value) => { section.id = value; }),
+      makeField("Type", section.type, (value) => { section.type = value; }),
+      makeField("Visible: true/false", String(section.visible !== false), (value) => { section.visible = value === "true"; }),
+      makeField("Display order", section.order, (value) => { section.order = Number(value) || 0; }, "number")
+    );
+
+    Object.entries(section.content || {}).forEach(([key, value]) => {
+      const isLongText = key === "body" || key === "title" || text(value).length > 100;
+      fields.append(makeField(`Content: ${key}`, typeof value === "object" ? JSON.stringify(value) : value, (next) => {
+        if (typeof value === "object") {
+          try { section.content[key] = JSON.parse(next); } catch (_) { section.content[key] = next; }
+        } else {
+          section.content[key] = next;
+        }
+      }, isLongText ? "textarea" : "text", isLongText));
+    });
+
+    Object.entries(section.settings || {}).forEach(([key, value]) => {
+      fields.append(makeField(`Layout: ${key}`, value, (next) => {
+        section.settings[key] = next !== "" && !Number.isNaN(Number(next)) ? Number(next) : next;
+      }));
+    });
+
+    card.append(fields);
+    container.append(card);
+  });
+}
+
+function renderMenu() {
+  const container = $("#menu-items");
+  if (!container) return;
+  container.innerHTML = "";
+
+  menu.sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+
+  menu.forEach((item, index) => {
+    const card = document.createElement("article");
+    card.className = "menu-editor";
+
+    const header = document.createElement("div");
+    header.className = "row";
+    const title = document.createElement("b");
+    title.textContent = item.name || "New menu item";
+    const actions = document.createElement("span");
+
+    const up = document.createElement("button");
+    up.type = "button";
+    up.textContent = "↑";
+    up.onclick = () => { moveItem(menu, index, -1); renderMenu(); };
+
+    const down = document.createElement("button");
+    down.type = "button";
+    down.textContent = "↓";
+    down.onclick = () => { moveItem(menu, index, 1); renderMenu(); };
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "Delete";
+    remove.onclick = () => {
+      if (!window.confirm("Delete this menu item?")) return;
+      menu.splice(index, 1);
+      renderMenu();
+    };
+
+    actions.append(up, down, remove);
+    header.append(title, actions);
+    card.append(header);
+
+    const fields = document.createElement("div");
+    fields.className = "fields";
+
+    ["name", "category", "price", "currency", "description", "ingredients", "imageUrl", "tags", "visible", "order"].forEach((key) => {
+      const value = key === "tags" ? (item.tags || []).join(", ") : item[key];
+      const type = key === "description" || key === "ingredients" ? "textarea" : key === "order" ? "number" : "text";
+      fields.append(makeField(key, value, (next) => {
+        if (key === "tags") item.tags = next.split(",").map(tag => tag.trim()).filter(Boolean);
+        else if (key === "visible") item.visible = next !== "false";
+        else if (key === "order") item.order = Number(next) || 0;
+        else item[key] = next;
+      }, type, type === "textarea"));
+    });
+
+    card.append(fields);
+    container.append(card);
+  });
+}
+
+function renderTheme() {
+  const container = $("#theme-form");
+  if (!container) return;
+  container.innerHTML = "";
+
+  Object.entries(site.brand || {}).forEach(([key, value]) => {
+    container.append(makeField(`Brand: ${key}`, value, (next) => { site.brand[key] = next; }));
+  });
+
+  Object.entries(site.theme || {}).forEach(([key, value]) => {
+    container.append(makeField(`Theme: ${key}`, value, (next) => {
+      site.theme[key] = next !== "" && !Number.isNaN(Number(next)) ? Number(next) : next;
+    }));
+  });
+
+  Object.entries(site.footer || {}).forEach(([key, value]) => {
+    if (typeof value !== "object") container.append(makeField(`Footer: ${key}`, value, (next) => { site.footer[key] = next; }));
+  });
+}
+
+function renderAll() {
+  renderSections();
+  renderMenu();
+  renderTheme();
+}
+
+async function publishFile(path, data) {
+  const token = await currentUser.getIdToken(true);
+  const response = await fetch("/api/publish", {
+    method: "POST",
+    headers: { "content-type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ action: "save-json", path, data })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || `Publish failed with status ${response.status}`);
+}
+
+async function publishAll() {
+  try {
+    setStatus("Publishing to GitHub…");
+    await publishFile("content/site.json", site);
+    await publishFile("content/menu.json", menu);
+    setStatus("Published successfully. Cloudflare Pages will deploy the commit.");
+  } catch (error) {
+    console.error(error);
+    setStatus(error.message, true);
+  }
+}
+
+function addSection() {
+  site.sections.push({
+    id: `text-${Date.now()}`,
+    type: "text",
+    order: site.sections.length + 1,
+    visible: true,
+    settings: { background: "#FBF8F1", align: "left", animation: "fade-up", delay: 0 },
+    content: { eyebrow: "New section", title: "New title", body: "Write your content here." }
+  });
+  renderSections();
+}
+
+function addMenuItem() {
+  menu.push({
+    id: `item-${Date.now()}`,
+    order: menu.length + 1,
+    visible: true,
+    category: "Chaat",
+    name: "New menu item",
+    price: "0.00",
+    currency: "$",
+    description: "Description",
+    ingredients: "Ingredients",
+    tags: [],
+    imageUrl: ""
+  });
+  renderMenu();
+}
+
+function setupMediaUpload() {
+  $("#upload")?.addEventListener("click", async () => {
+    const file = $("#media-file")?.files?.[0];
+    const output = $("#upload-result");
+    if (!file) { output.textContent = "Choose a file first."; return; }
+
+    const allowed = new Set(["image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm"]);
+    const limit = file.type.startsWith("video/") ? 15 : 5;
+    if (!allowed.has(file.type) || file.size > limit * 1024 * 1024) {
+      output.textContent = `Unsupported file or file exceeds ${limit} MB.`;
+      return;
+    }
+
+    try {
+      const token = await currentUser.getIdToken(true);
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const safeName = file.name.replace(/[^a-z0-9._-]/gi, "-");
+      const response = await fetch("/api/publish", {
+        method: "POST",
+        headers: { "content-type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "upload-media", name: safeName, contentType: file.type, base64 })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Upload failed");
+      output.textContent = `Uploaded: ${result.path}`;
+    } catch (error) {
+      output.textContent = error.message;
+    }
+  });
+}
+
+function setupTabs() {
+  document.querySelectorAll(".tab").forEach(tab => tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(item => item.classList.remove("active"));
+    tab.classList.add("active");
+    document.querySelectorAll(".view").forEach(view => { view.hidden = view.id !== tab.dataset.view; });
+  }));
+}
+
+$("#add-section")?.addEventListener("click", addSection);
+$("#add-item")?.addEventListener("click", addMenuItem);
+$("#logout")?.addEventListener("click", () => firebase.auth().signOut());
+$("#signin")?.addEventListener("click", async () => {
+  try {
+    $("#auth-error").textContent = "";
+    await firebase.auth().signInWithEmailAndPassword($("#email").value.trim(), $("#password").value);
+  } catch (error) {
+    $("#auth-error").textContent = `${error.code || "Login failed"}: ${error.message || "Check your credentials."}`;
+  }
+});
+
+setupTabs();
+setupMediaUpload();
+
+firebase.auth().onAuthStateChanged(async (user) => {
+  if (!user) return;
+  currentUser = user;
+  $("#login").hidden = true;
+  $("#app").hidden = false;
+  $("#user").textContent = user.email || "Signed in";
+  try { await loadContent(); } catch (error) { setStatus(error.message, true); }
+});
